@@ -13,7 +13,7 @@ from langchain.schema import HumanMessage, SystemMessage
 
 
 def get_llm(
-    provider: str = "llama3",
+    provider: str = "ollama",
     model_name: str = "llama3",
     temperature: float = 0.3,
     **kwargs
@@ -74,6 +74,11 @@ Always cite your sources when possible."""
 
 Question: {question}
 
+Instructions:
+- Answer in 3 sentences or less
+- Only use information from the context above
+- If unsure, say 'I could not find that in the course material'
+
 Answer:"""
 
     prompt = PromptTemplate(
@@ -98,7 +103,7 @@ def create_qa_chain(llm, retriever, prompt: Optional[PromptTemplate] = None):
 
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type="stuff",
+        chain_type="map_reduce",
         retriever=retriever,
         prompt=prompt,
         return_source_documents=True

@@ -1,8 +1,3 @@
-"""
-Document Loader and Chunker
-===========================
-"""
-
 from pathlib import Path
 from typing import List, Optional
 from langchain_community.document_loaders import (
@@ -11,37 +6,57 @@ from langchain_community.document_loaders import (
     WebBaseLoader,
     DirectoryLoader
 )
-from langchain.text_splitter import (
+from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
     MarkdownHeaderTextSplitter,
-    TokenTextSplitter
+    TokenTextSplitter,
 )
-
 
 def load_documents(data_dir: str = "data/") -> List:
     """
     Load documents from the data directory.
-    TODO: Extend to support more file types (PDF, HTML, etc.)
+    Supports: text files, PDFs, and web URLs from urls.txt
     """
     path = Path(data_dir)
     documents = []
 
-    # Basic text file loading - extend this for your scenario
+    # Load local text files
     for file_path in path.glob("*.txt"):
-        loader = TextLoader(str(file_path), encoding="utf-8")
-        documents.extend(loader.load())
+        if file_path.name != "urls.txt":  # Skip the URLs file itself
+            loader = TextLoader(str(file_path), encoding="utf-8")
+            documents.extend(loader.load())
 
-    # TODO: Add PDF loader
-    # for pdf_path in path.glob("*.pdf"):
-    #     loader = PyPDFLoader(str(pdf_path))
-    #     documents.extend(loader.load())
+    # Load PDF files
+    for pdf_path in path.glob("*.pdf"):
+        try:
+            loader = PyPDFLoader(str(pdf_path))
+            documents.extend(loader.load())
+        except Exception as e:
+            print(f"Error loading PDF {pdf_path}: {e}")
+
+    # Load web URLs from urls.txt
+    urls_file = path / "urls.txt"
+    if urls_file.exists():
+        with open(urls_file, 'r') as f:
+            urls = [line.strip() for line in f if line.strip()]
+            for url in urls:
+                try:
+                    web_loader = WebBaseLoader(url)
+                    web_docs = web_loader.load()
+                    # Add metadata to web documents
+                    for doc in web_docs:
+                        doc.metadata["source_type"] = "web"
+                        doc.metadata["url"] = url
+                    documents.extend(web_docs)
+                except Exception as e:
+                    print(f"Error loading URL {url}: {e}")
 
     return documents
 
 
 def chunk_documents(
     documents: List,
-    chunk_size: int = 500,
+    chunk_size: int = 2000,
     chunk_overlap: int = 50,
     chunking_strategy: str = "recursive"
 ) -> List:
@@ -76,9 +91,9 @@ def chunk_documents(
 
     chunks = splitter.split_documents(documents)
 
-    # TODO: Add custom chunk metadata
-    # for i, chunk in enumerate(chunks):
-    #     chunk.metadata["chunk_id"] = i
+    # Add custom chunk metadata for tracking
+    for i, chunk in enumerate(chunks):
+        chunk.metadata["chunk_id"] = i
 
     return chunks
 

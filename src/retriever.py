@@ -6,11 +6,13 @@ Students must implement and customize retrieval strategies.
 
 from typing import List, Optional, Dict
 from langchain_community.vectorstores import Chroma, FAISS
-from langchain.schema import Document
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import LLMChainExtractor
-from langchain.retrievers.self_query.base import SelfQueryRetriever
-from langchain.chains.query_constructor.base import AttributeInfo
+from rank_bm25 import BM25Okapi
+import numpy as np
+from langchain_core.documents import Document
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import LLMChainExtractor
+from langchain_classic.retrievers.self_query.base import SelfQueryRetriever
+from langchain_classic.chains.query_constructor.base import AttributeInfo
 
 
 def create_vectorstore(
@@ -88,6 +90,8 @@ def retrieve_with_hybrid_search(
 
     Students should implement this for better recall.
     """
+    
+
     raise NotImplementedError("Hybrid search not yet implemented")
 
 

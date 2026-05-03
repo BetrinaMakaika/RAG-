@@ -5,6 +5,7 @@ Students: customize the prompt and LLM configuration.
 """
 
 from typing import List, Optional, Dict
+import re
 from langchain_community.llms import Ollama
 from langchain_openai import ChatOpenAI
 from langchain_classic.chains import RetrievalQA
@@ -14,8 +15,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 def get_llm(
     provider: str = "huggingface",
-    model_name: str = "gpt2",
-    temperature: float = 0.7,
+    model_name: str = "distilgpt2",
+    temperature: float = 0.5,
     **kwargs
 ):
     """
@@ -27,8 +28,8 @@ def get_llm(
     - Add API key configurations
 
     Recommended local models (HuggingFace):
-    - gpt2 (small, fast, default)
-    - distilgpt2 (very small)
+    - distilgpt2 (small, fast, cached)
+    - facebook/opt-350m (better quality but larger)
     - meta-llama/Llama-2-7b (if you have GPU)
     """
     if provider == "ollama":
@@ -42,10 +43,8 @@ def get_llm(
                 task="text-generation",
                 model_kwargs={},
                 pipeline_kwargs={
-                    "temperature": temperature,
-                    "max_new_tokens": 128,
-                    "do_sample": False,
-                    "pad_token_id": 50256
+                    "max_new_tokens": 100,
+                    "do_sample": False
                 }
             )
         except Exception as e:
@@ -55,9 +54,7 @@ def get_llm(
                 task="text-generation",
                 model_kwargs={},
                 pipeline_kwargs={
-                    "max_new_tokens": 64,
-                    "do_sample": False,
-                    "pad_token_id": 50256
+                    "max_new_tokens": 80
                 }
             )
     elif provider == "openai":
@@ -91,7 +88,9 @@ Answer based on the provided context. If information is not available, say so cl
 Be concise and helpful."""
 
     if template is None:
-        template = """Context: {context}
+        template = """Based on this context, answer the question briefly in 1-2 sentences:
+
+Context: {context}
 
 Question: {question}
 
@@ -117,13 +116,17 @@ def create_qa_chain(llm, retriever, prompt: Optional[PromptTemplate] = None):
     if prompt is None:
         prompt = create_rag_prompt()
 
-    # Use chain_type_kwargs to pass the prompt
+    # Use chain_type_kwargs to pass the prompt with improved settings
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
         retriever=retriever,
-        chain_type_kwargs={"prompt": prompt},
-        return_source_documents=True
+        chain_type_kwargs={
+            "prompt": prompt,
+            "document_variable_name": "context"
+        },
+        return_source_documents=True,
+        verbose=False
     )
 
     return qa_chain
@@ -150,8 +153,38 @@ def generate_response(
         if not isinstance(answer, str):
             answer = str(answer) if answer else "No answer generated."
 
+        # Clean up the answer by removing the prompt template if present
+        answer = answer.strip()
+        
+        # Extract just the answer portion if the full prompt template is included
+        # The prompt template ends with "Answer:" so we want everything after that
+        if 'Answer:' in answer:
+            # Find the last occurrence of "Answer:" and take everything after it
+            parts = answer.rsplit('Answer:', 1)
+            if len(parts) > 1:
+                answer = parts[1].strip()
+        
+        # Remove period if it's the only character (fragment detection)
+        answer_stripped = answer.rstrip('.')
+        
+        # If answer is too short or appears to be a fragment (single word, very short), use fallback
+        if len(answer_stripped) < 15 or (len(answer_stripped.split()) == 1 and len(answer_stripped) < 20):
+            # Check if we have sources we can build from
+            if return_sources and "source_documents" in result and result["source_documents"]:
+                # Extract text from first source document
+                answer = result["source_documents"][0].page_content[:200]
+            else:
+                answer = "Unable to generate a complete response. Please try rephrasing your question."
+        
+        # Limit to first 3 sentences to prevent rambling, but only if we have multiple sentences
+        sentences = [s.strip() for s in answer.split('.') if s.strip()]
+        if len(sentences) > 3:
+            answer = '. '.join(sentences[:3]) + '.'
+        elif len(sentences) > 0 and not answer.endswith('.'):
+            answer = '. '.join(sentences) + '.'
+        
         response = {
-            "answer": answer.strip() if answer else "Unable to generate a response."
+            "answer": answer if answer else "Unable to generate a response."
         }
 
         if return_sources and "source_documents" in result and result["source_documents"]:

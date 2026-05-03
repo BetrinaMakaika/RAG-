@@ -116,3 +116,123 @@ class RAGPipeline:
             self.vectorstore,
             k=self.retrieval_k
         )
+
+        logger.info("Creating QA chain...")
+        prompt = create_rag_prompt()
+        self.qa_chain = create_qa_chain(self.llm, self.retriever, prompt)
+
+    def query(self, question: str, return_sources: bool = True) -> Dict:
+        """
+        Query the RAG pipeline.
+        Includes query preprocessing and response postprocessing for student services.
+        """
+        if self.qa_chain is None:
+            raise RuntimeError("Pipeline not initialized. Call load_and_index() first.")
+
+        # Query preprocessing - normalize student questions
+        processed_question = question.strip().lower()
+        
+        # Common student service keywords mapping
+        keywords = {
+            'reg': 'registration',
+            'enroll': 'enrollment',
+            'fee': 'fees',
+            'payment': 'fees',
+            'time': 'timetable',
+            'schedule': 'timetable',
+            'hostel': 'accommodation',
+            'dorm': 'accommodation',
+            'advisor': 'academic advising',
+            'department': 'departmental support'
+        }
+        
+        for abbr, full in keywords.items():
+            if abbr in processed_question:
+                processed_question = processed_question.replace(abbr, full)
+
+        logger.info(f"Querying: {question}")
+        response = generate_response(self.qa_chain, processed_question, return_sources)
+        
+        # Response postprocessing
+        if "answer" in response:
+            # Add confidence indicator based on response length
+            answer_text = response["answer"].strip()
+            if not answer_text or answer_text == "No answer generated.":
+                response["confidence"] = "low"
+            elif len(answer_text) < 20:
+                response["confidence"] = "low"
+            else:
+                response["confidence"] = "medium"
+        
+        return response
+
+    def evaluate(self, test_queries: List[Dict]) -> Dict:
+        """
+        Evaluate the pipeline on test queries.
+        
+        Computes basic metrics:
+        - Answer length (as proxy for confidence)
+        - Source availability
+        - Query success rate
+        """
+        if self.qa_chain is None:
+            raise RuntimeError("Pipeline not initialized. Call load_and_index() first.")
+        
+        results = []
+        total_queries = len(test_queries)
+        successful_queries = 0
+        sources_found = 0
+        total_answer_length = 0
+        
+        for item in test_queries:
+            query = item["question"]
+            expected = item.get("expected_answer", "")
+
+            response = self.query(query, return_sources=True)
+            
+            answer_text = response.get("answer", "")
+            has_sources = len(response.get("sources", [])) > 0
+            
+            results.append({
+                "query": query,
+                "expected": expected,
+                "answer": answer_text,
+                "sources": response.get("sources", []),
+                "confidence": response.get("confidence", "unknown")
+            })
+            
+            # Calculate metrics
+            if answer_text and answer_text != "No answer generated.":
+                successful_queries += 1
+                total_answer_length += len(answer_text)
+            
+            if has_sources:
+                sources_found += 1
+
+        # Compute evaluation metrics
+        metrics = {
+            "total_queries": total_queries,
+            "successful_queries": successful_queries,
+            "success_rate": successful_queries / total_queries if total_queries > 0 else 0,
+            "avg_answer_length": total_answer_length / successful_queries if successful_queries > 0 else 0,
+            "sources_found_rate": sources_found / total_queries if total_queries > 0 else 0,
+            "results": results
+        }
+        
+        return metrics
+
+
+def main():
+    """Main entry point for testing - use main.py instead."""
+    raise RuntimeError(
+        "pipeline.py should not be run directly. "
+        "Please use: python main.py"
+    )
+
+
+if __name__ == "__main__":
+    print("⚠️  Error: pipeline.py should not be run directly.")
+    print("Please use: python main.py")
+    print("\nThe RAGPipeline class is imported by main.py and the src package.")
+    import sys
+    sys.exit(1)

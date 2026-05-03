@@ -85,13 +85,13 @@ def main():
     )
     parser.add_argument(
         "--llm",
-        default="ollama",
+        default="huggingface",
         choices=["ollama", "huggingface", "openai"],
         help="LLM provider"
     )
     parser.add_argument(
         "--llm-model",
-        default="phi3",
+        default="distilgpt2",
         help="LLM model name"
     )
     parser.add_argument(
@@ -125,7 +125,7 @@ def main():
         chunk_size=args.chunk_size
     )
 
-    pipeline.load_and_index()
+    pipeline.load_and_index(force_rebuild=True)
 
     if args.mode == "interactive":
         interactive_mode(pipeline)

@@ -22,7 +22,7 @@ def load_documents(data_dir: str = "data/") -> List:
 
     # Load local text files
     for file_path in path.glob("*.txt"):
-        if file_path.name != "urls.txt":  # Skip the URLs file itself
+        if file_path.name not in ["urls.txt", "url.txt"]:  # Skip URL files
             loader = TextLoader(str(file_path), encoding="utf-8")
             documents.extend(loader.load())
 
@@ -35,7 +35,9 @@ def load_documents(data_dir: str = "data/") -> List:
             print(f"Error loading PDF {pdf_path}: {e}")
 
     # Load web URLs from urls.txt
-    urls_file = path / "urls.txt"
+    urls_file = path / "url.txt"
+    if not urls_file.exists():
+        urls_file = path / "urls.txt"
     if urls_file.exists():
         with open(urls_file, 'r') as f:
             urls = [line.strip() for line in f if line.strip()]
